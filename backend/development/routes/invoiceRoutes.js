@@ -5,19 +5,18 @@ const InvoiceController = require("../controllers/invoiceController"); // Invoic
 
 // +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ //
 
+// Fetch by Criteria
+router.get("/status/:status", InvoiceController.getInvoicesByStatus); // Get invoices by status
+router.get("/customer/:customerId", InvoiceController.getInvoicesByCustomer); // Get invoices by customer
+router.get("/date-range", InvoiceController.getInvoicesByDateRange); // Get invoices by date range
+
 // === CRUD Operations === //
 
-router.post('/', InvoiceController.createInvoice);  // Create a new invoice
-
-// router.get('/:invoiceId', InvoiceController.getInvoiceById);  // Get an invoice by ID
-// router.put('/:invoiceId', InvoiceController.updateInvoice);  // Update an invoice by ID
-// router.delete('/:invoiceId', InvoiceController.deleteInvoice);  // Delete an invoice by ID
-// router.get('/', InvoiceController.getAllInvoices);  // Fetch all invoices
-
-// // Fetch by Criteria
-// router.get('/status/:status', InvoiceController.getInvoicesByStatus);  // Get invoices by status
-// router.get('/customer/:customerId', InvoiceController.getInvoicesByCustomer);  // Get invoices by customer
-// router.get('/dates', InvoiceController.getInvoicesByDateRange);  // Get invoices by date range
+router.post("/", InvoiceController.createInvoice); // Create a new invoice
+router.get("/:invoiceId", InvoiceController.getInvoiceById); // Get an invoice by ID
+router.put("/:invoiceId", InvoiceController.updateInvoice); // Update an invoice by ID
+router.delete("/:invoiceId", InvoiceController.deleteInvoice); // Delete an invoice by ID
+router.get("/", InvoiceController.getAllInvoices);
 
 // // Workflow Actions
 // router.put('/:invoiceId/submit', InvoiceController.submitInvoiceForApproval);  // Submit invoice for approval
