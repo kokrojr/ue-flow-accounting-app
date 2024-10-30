@@ -4,7 +4,8 @@
 
 const Invoice = require("../schemas/invoice");
 const FirestoreInterface = require("../db/firestore");
-const { Timestamp } = require("firebase-admin").firestore;
+const PDFService = require("../services/pdfService"); // Generate PDFs
+const EmailService = require("../services/emailService"); // Send Emails
 
 class InvoiceModel {
   // -------------------------------------- //
@@ -13,82 +14,34 @@ class InvoiceModel {
 
   static async createInvoice(invoiceData) {
     try {
-      // Ensure the dateCreated field is set to the current timestamp
-      invoiceData.dateCreated = Timestamp.fromDate(new Date());
-
-      // Set a default dateDue (30 days from dateCreated) if not provided
+      // Set default dateDue (30 days from dateCreated) if not provided
       if (!invoiceData.dateDue) {
         const defaultDueDate = new Date();
         defaultDueDate.setDate(defaultDueDate.getDate() + 30); // Add 30 days
-        invoiceData.dateDue = Timestamp.fromDate(defaultDueDate);
+        invoiceData.dateDue = defaultDueDate;
       } else {
-        // Convert user-provided dateDue to Firestore Timestamp
-        invoiceData.dateDue = Timestamp.fromDate(new Date(invoiceData.dateDue));
+        // Convert provided dateDue to JavaScript Date object
+        invoiceData.dateDue = new Date(invoiceData.dateDue);
       }
 
-      const invoice = new Invoice(invoiceData); // Create Invoice instance
+      // Instantiate invoice
+      const invoice = new Invoice(invoiceData);
       const invoiceDoc =
-        FirestoreInterface.prepareDocumentForFirestore(invoice); // Prepare for Firestore
-
+        FirestoreInterface.prepareDocumentForFirestore(invoice);
       const docID = await FirestoreInterface.addDocument(
         "invoices",
         invoiceDoc
       );
+      // Update invoice with generated id
+      await FirestoreInterface.updateDocument("invoices", docID, { docID });
       invoice.docID = docID;
-
+      // Return invoice
       return invoice;
     } catch (error) {
+      // Handle error
       throw new Error(`Error creating invoice: ${error.message}`);
     }
   }
-
-  // static async createInvoice(invoiceData) {
-  //   try {
-  //     // Ensure dates are stored as Firestore Timestamps
-  //     invoiceData.dateCreated = Timestamp.fromDate(
-  //       new Date(invoiceData.dateCreated || Date.now())
-  //     );
-  //     invoiceData.dateDue = Timestamp.fromDate(new Date(invoiceData.dateDue));
-
-  //     // Instantiate invoice
-  //     const invoice = new Invoice(invoiceData);
-  //     const invoiceDoc =
-  //       FirestoreInterface.prepareDocumentForFirestore(invoice);
-  //     const docID = await FirestoreInterface.addDocument(
-  //       "invoices",
-  //       invoiceDoc
-  //     );
-  //     // Update invoice with generated id
-  //     await FirestoreInterface.updateDocument("invoices", docID, { docID });
-  //     invoice.docID = docID;
-  //     // Return invoice
-  //     return invoice;
-  //   } catch (error) {
-  //     // Handle error
-  //     throw new Error(`Error creating invoice: ${error.message}`);
-  //   }
-  // }
-
-  // static async createInvoice(invoiceData) {
-  //   try {
-  //     // Instantiate invoice
-  //     const invoice = new Invoice(invoiceData);
-  //     const invoiceDoc =
-  //       FirestoreInterface.prepareDocumentForFirestore(invoice);
-  //     const docID = await FirestoreInterface.addDocument(
-  //       "invoices",
-  //       invoiceDoc
-  //     );
-  //     // Update invoice with generated id
-  //     await FirestoreInterface.updateDocument("invoices", docID, { docID });
-  //     invoice.docID = docID;
-  //     // Return invoice
-  //     return invoice;
-  //   } catch (error) {
-  //     // Handle error
-  //     throw new Error(`Error creating invoice: ${error.message}`);
-  //   }
-  // }
 
   // -------------------------------------------- //
   // ----------- Delete Invoice by ID ----------- //
@@ -214,6 +167,25 @@ class InvoiceModel {
     }
   }
 
+  // -------------------------------------------------------- //
+  // ------- Get all Invoices By Specific Field Value ------- //
+  // -------------------------------------------------------- //
+
+  static async getInvoicesByField(field, value) {
+    try {
+      const invoices = await FirestoreInterface.getDocumentsByField(
+        "invoices",
+        field,
+        value
+      );
+      return invoices;
+    } catch (error) {
+      throw new Error(
+        `Error retrieving invoices by ${field}: ${error.message}`
+      );
+    }
+  }
+
   // ----------------------------------------------------------- //
   // -------------- Get all Invoices By Customers -------------- //
   // ----------------------------------------------------------- //
@@ -274,6 +246,55 @@ class InvoiceModel {
       throw new Error(
         `Error retrieving invoices by date range: ${error.message}`
       );
+    }
+  }
+
+  // ------------------------------------------------------- //
+  // -------------- Get all disputed invoices -------------- //
+  // ------------------------------------------------------- //
+
+  static async getDisputedInvoices() {
+    try {
+      const invoices = await FirestoreInterface.getDocumentsByCondition(
+        "invoices",
+        "disputeInfo.isActive",
+        true
+      );
+      return invoices;
+    } catch (error) {
+      throw new Error(`Error retrieving disputed invoices: ${error.message}`);
+    }
+  }
+
+  // ------------------------------------------------------- //
+  // -------------- Update Invoice Status -------------- //
+  // ------------------------------------------------------- //
+  
+  // Method to update invoice status with additional fields
+  static async updateInvoiceStatus(invoiceId, status, additionalData = {}) {
+    try {
+      const invoice = await FirestoreInterface.getDocumentById(
+        "invoices",
+        invoiceId
+      );
+
+      if (!invoice) throw new Error("Invoice not found");
+
+      // Update status and additional fields
+      const updatedData = {
+        ...additionalData,
+        status,
+        lastUpdated: new Date().toISOString(),
+      };
+
+      await FirestoreInterface.updateDocument(
+        "invoices",
+        invoiceId,
+        updatedData
+      );
+      return { ...invoice, ...updatedData };
+    } catch (error) {
+      throw new Error(`Error updating invoice status: ${error.message}`);
     }
   }
 }

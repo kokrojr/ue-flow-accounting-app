@@ -1,6 +1,6 @@
-// ======================================================== //
-// ------------------ Invoice Controller ------------------ //
-// ======================================================== //
+// ====================================================== //
+// ================= Invoice Controller ================= //
+// ====================================================== //
 
 const InvoiceModel = require("../models/invoiceModel");
 
@@ -162,8 +162,161 @@ class InvoiceController {
     }
   }
 
-  
+  // ------------------------------------------------------------ //
+  // -------------- Get invoices by payment status -------------- //
+  // ------------------------------------------------------------ //
 
+  static async getInvoicesByPaymentStatus(req, res) {
+    try {
+      const { status } = req.params;
+      const invoices = await InvoiceModel.getInvoicesByField(
+        "paymentStatus",
+        status
+      );
+      res.status(200).json({
+        message: `Invoices with payment status '${status}' retrieved successfully`,
+        invoices,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // ------------------------------------------------------------ //
+  // -------------- Get invoices by payment method -------------- //
+  // ------------------------------------------------------------ //
+
+  static async getInvoicesByPaymentMethod(req, res) {
+    try {
+      const { method } = req.params;
+      const invoices = await InvoiceModel.getInvoicesByField(
+        "paymentMethod",
+        method
+      );
+      res.status(200).json({
+        message: `Invoices with payment method '${method}' retrieved successfully`,
+        invoices,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // --------------------------------------------------- //
+  // -------------- Get disputed invoices -------------- //
+  // --------------------------------------------------- //
+
+  static async getDisputedInvoices(req, res) {
+    try {
+      const invoices = await InvoiceModel.getDisputedInvoices();
+      res.status(200).json({
+        message: `Disputed invoices retrieved successfully`,
+        invoices,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // Get all open invoices (isClosed = false)
+  // --------------------------------------------------- //
+  // -------------- Get all open invoices -------------- //
+  // --------------------------------------------------- //
+
+  static async getOpenInvoices(req, res) {
+    try {
+      const invoices = await InvoiceModel.getInvoicesByField("isClosed", false);
+      res.status(200).json({
+        message: `Open invoices retrieved successfully`,
+        invoices,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // --------------------------------------------------- //
+  // ------------- Get all closed invoices ------------- //
+  // --------------------------------------------------- //
+  // Get all closed invoices (isClosed = true)
+
+  static async getClosedInvoices(req, res) {
+    try {
+      const invoices = await InvoiceModel.getInvoicesByField("isClosed", true);
+      res.status(200).json({
+        message: `Closed invoices retrieved successfully`,
+        invoices,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  // ---------------------------------------------------- //
+  // ------------- Workflow: Submit Invoice ------------- //
+  // ---------------------------------------------------- //
+
+  // static async submitInvoice(req, res) {
+  //   try {
+  //     const { invoiceId } = req.params;
+
+  //     // Retrieve the invoice and update status to Submitted
+  //     const updatedInvoice = await InvoiceModel.updateInvoiceStatus(
+  //       invoiceId,
+  //       "Submitted",
+  //       { dateSubmitted: new Date().toISOString() }
+  //     );
+
+  //     res.status(200).json({
+  //       message: "Invoice submitted successfully",
+  //       invoice: updatedInvoice,
+  //     });
+  //   } catch (error) {
+  //     res.status(500).json({ error: error.message });
+  //   }
+  // }
+
+  // Submit Invoice for Approval
+  static async submitInvoice(req, res) {
+    try {
+      const { invoiceId } = req.params;
+
+      // Retrieve the invoice to ensure it's in the correct stage
+      const invoice = await InvoiceModel.getInvoiceById(invoiceId);
+      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
+
+      // Verify the invoice is in the Draft stage before submission
+      if (invoice.workflow.currentStage !== "Draft") {
+        return res
+          .status(400)
+          .json({ error: "Invoice must be in Draft to submit for approval." });
+      }
+
+      // Update the workflow to reflect submission
+      invoice.workflow.currentStage = "Submitted";
+      invoice.workflow.statusChangeDate = new Date().toISOString();
+      invoice.workflow.actions.push({
+        stage: "Submitted",
+        action: "Submitted for Approval",
+        by: req.user.id, // assuming req.user contains the authenticated user info
+        timeStamp: new Date().toISOString(),
+      });
+
+      // Save changes in Firestore
+      const updatedInvoice = await InvoiceModel.updateInvoice(invoiceId, {
+        workflow: invoice.workflow,
+        status: "Submitted",
+        dateSubmitted: new Date().toISOString(),
+      });
+
+      res.status(200).json({
+        message: "Invoice submitted successfully",
+        invoice: updatedInvoice,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 
 module.exports = InvoiceController;

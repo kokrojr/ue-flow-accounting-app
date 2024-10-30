@@ -1,4 +1,6 @@
-// ==== Invoice Scheme ==== //
+// ====================================================== //
+// =================== Invoice Scheme =================== //
+// ====================================================== //
 
 class Invoice {
   constructor(invoiceData) {
@@ -11,6 +13,7 @@ class Invoice {
       this.isClosed = invoiceData.isClosed || false;
       this.isPaid = invoiceData.isPaid || false;
       this.isArchived = invoiceData.isArchived || false;
+      this.hasPDF = invoiceData.hasPDF || false;
 
       // Customer & Items
       this.customer = invoiceData.customer || {}; // Customer object
@@ -20,12 +23,12 @@ class Invoice {
       this.items = invoiceData.items || []; // List of invoice items
 
       // Dates
-      this.dateCreated = invoiceData.dateCreated || null;
+      this.dateCreated = invoiceData.dateCreated || new Date().toISOString();
       this.dateDue = invoiceData.dateDue || null;
       this.dateSubmitted = invoiceData.dateSubmitted || null;
       this.dateApprovedOrRejected = invoiceData.dateApprovedOrRejected || null;
       this.dateClosed = invoiceData.dateClosed || null;
-      this.lastUpdated = invoiceData.lastUpdated || new Date();
+      this.lastUpdated = invoiceData.lastUpdated || new Date().toISOString();
 
       // Status & Notes
       this.status = invoiceData.status || "Draft";
@@ -55,11 +58,19 @@ class Invoice {
       this.attachments = invoiceData.attachments || [];
       this.relatedDocuments = invoiceData.relatedDocuments || [];
 
-      // Workflow, Assignee Information, & KPIs
-      this.workflow = invoiceData.workflow || {};
+      // Assignee Information, & KPIs
       this.currentAssignee = invoiceData.currentAssignee || {};
       this.routingHistory = invoiceData.routingHistory || [];
       this.reports = invoiceData.reports || {};
+
+      // Workflow
+      this.workflow = {
+        currentStage: invoiceData.workflow?.currentStage || "Draft",
+        actions: invoiceData.workflow?.actions || [],
+        statusChangeDate: invoiceData.workflow?.statusChangeDate || null,
+        expectedCompletionDate:
+          invoiceData.workflow?.expectedCompletionDate || null,
+      };
 
       // Finance info
       this.financeInfo = invoiceData.financeInfo || {};
@@ -351,6 +362,203 @@ class Invoice {
   }
 
   // ---------------------------------------------- //
+  // ------- Methods for Workflow Processing ------ //
+  // ---------------------------------------------- //
+
+  // Workflow Getters
+  getWorkflow() {
+    return this.workflow;
+  }
+
+  getCurrentStage() {
+    return this.workflow.currentStage;
+  }
+
+  getActions() {
+    return this.workflow.actions;
+  }
+
+  getStatusChangeDate() {
+    return this.workflow.statusChangeDate;
+  }
+
+  getExpectedCompletionDate() {
+    return this.workflow.expectedCompletionDate;
+  }
+
+  // Workflow Setters
+  setCurrentStage(stage) {
+    this.workflow.currentStage = stage;
+    this.updateStatusChangeDate();
+  }
+
+  setStatusChangeDate(date) {
+    this.workflow.statusChangeDate = date;
+  }
+
+  setExpectedCompletionDate(date) {
+    this.workflow.expectedCompletionDate = date;
+  }
+
+  // Method to update status change date
+  updateStatusChangeDate() {
+    this.workflow.statusChangeDate = new Date().toISOString();
+  }
+
+  // Method to add an action to the workflow
+  addWorkflowAction({
+    stage,
+    action,
+    by,
+    timeStamp = new Date().toISOString(),
+  }) {
+    this.workflow.actions.push({
+      stage,
+      action,
+      by,
+      timeStamp,
+    });
+    this.updateStatusChangeDate(); // Update status change date each time an action is added
+  }
+
+  // Method to update the workflow stage and log the action
+  advanceWorkflowStage(newStage, action, by) {
+    this.setCurrentStage(newStage);
+    this.addWorkflowAction({
+      stage: newStage,
+      action,
+      by,
+    });
+  }
+
+  // Method to set workflow as archived
+  archiveWorkflow(by) {
+    this.advanceWorkflowStage("Archived", "Archived", by);
+  }
+
+  // Method to check if workflow is completed
+  isWorkflowCompleted() {
+    return this.workflow.currentStage === "Completed";
+  }
+
+  // --------------------------------------------------------- //
+  // ----- Methods Method to submit invoice for approval ----- //
+  // --------------------------------------------------------- //
+
+  // Method to submit invoice for approval
+  submitForApproval() {
+    if (this.workflow.currentStage !== "Draft") {
+      throw new Error("Invoice must be in Draft to submit for approval.");
+    }
+
+    this.workflow.currentStage = "Submitted";
+    this.workflow.statusChangeDate = new Date().toISOString();
+    this.workflow.actions.push({
+      stage: "Submitted",
+      action: "Submitted for Approval",
+      by: this.createdBy.userID,
+      timeStamp: new Date().toISOString(),
+    });
+  }
+
+  // ----------------------------------------- //
+  // ----- Method to approve the invoice ----- //
+  // ----------------------------------------- //
+
+  approve(approver) {
+    if (this.workflow.currentStage !== "Under Review") {
+      throw new Error("Invoice must be under review to approve.");
+    }
+
+    this.workflow.currentStage = "Approved";
+    this.workflow.statusChangeDate = new Date().toISOString();
+    this.workflow.actions.push({
+      stage: "Under Review",
+      action: "Approved",
+      by: approver.userID,
+      timeStamp: new Date().toISOString(),
+    });
+  }
+
+  // ----------------------------------------- //
+  // ----- Method to reject the invoice ----- //
+  // ----------------------------------------- //
+
+  reject(approver, reason) {
+    if (this.workflow.currentStage !== "Under Review") {
+      throw new Error("Invoice must be under review to reject.");
+    }
+
+    this.workflow.currentStage = "Rejected";
+    this.workflow.statusChangeDate = new Date().toISOString();
+    this.workflow.actions.push({
+      stage: "Under Review",
+      action: `Rejected - ${reason}`,
+      by: approver.userID,
+      timeStamp: new Date().toISOString(),
+    });
+  }
+
+  // ----------------------------------------- //
+  // ----- Method to send for signature ----- //
+  // ----------------------------------------- //
+
+  sendForSignature(role) {
+    if (this.workflow.currentStage !== "Approved") {
+      throw new Error("Invoice must be approved to send for signature.");
+    }
+
+    const action =
+      role === "creator"
+        ? "Sent for Signature - Creator"
+        : "Sent for Signature - Manager";
+    this.workflow.actions.push({
+      stage: "Approved",
+      action: action,
+      by: "System",
+      timeStamp: new Date().toISOString(),
+    });
+  }
+
+  // ----------------------------------------- //
+  // ----- Method to mark as paid  ----- //
+  // ----------------------------------------- //
+
+  markAsPaid(financeUser) {
+    if (this.workflow.currentStage !== "Finance Processing") {
+      throw new Error("Invoice must be in finance processing to mark as paid.");
+    }
+
+    this.workflow.currentStage = "Paid";
+    this.workflow.statusChangeDate = new Date().toISOString();
+    this.workflow.actions.push({
+      stage: "Finance Processing",
+      action: "Marked as Paid",
+      by: financeUser.userID,
+      timeStamp: new Date().toISOString(),
+    });
+  }
+
+  // ------------------------------ //
+  // ----- Method to archive  ----- //
+  // ------------------------------ //
+
+  archive(user) {
+    if (this.workflow.currentStage !== "Completed") {
+      throw new Error("Invoice must be completed to archive.");
+    }
+
+    this.workflow.currentStage = "Archived";
+    this.workflow.statusChangeDate = new Date().toISOString();
+    this.workflow.actions.push({
+      stage: "Archived",
+      action: "Archived",
+      by: user.userID,
+      timeStamp: new Date().toISOString(),
+    });
+  }
+
+  // ---------------------------------------------- //
   // ------- Methods for Calculating Totals ------- //
   // ---------------------------------------------- //
 
@@ -514,7 +722,7 @@ class Invoice {
   }
 
   // ----------------------------------------------------------------- //
-  // ------ Methods to Create Invoicce Data from Firestore Data ------ //
+  // ------ Methods to Create Invoice Data from Firestore Data ------ //
   // ----------------------------------------------------------------- //
 
   // Method to populate invoice properties from Firestore data

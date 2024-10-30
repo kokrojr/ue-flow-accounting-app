@@ -1,6 +1,6 @@
-// // =================================================== //
-// // ----------- Firestore  Database Utility ----------- //
-// // =================================================== //
+// ========================================================= //
+// ============== Firestore  Database Utility ============== //
+// ========================================================= //
 
 // Import configurations
 const db = require("../../config/firebase");
@@ -212,19 +212,20 @@ class FirestoreInterface {
         `[INFO] Querying '${collection}' where '${field}' is between '${startDate}' and '${endDate}'`
       );
 
-      // Convert startDate and endDate to Firestore Timestamps
-      const startTimestamp = Timestamp.fromDate(new Date(startDate));
-      const endTimestamp = Timestamp.fromDate(new Date(endDate));
+      // Ensure that the startDate and endDate cover the full day range
+      const startDateISO = new Date(startDate).toISOString(); // Start of the day
+      const endDateISO = new Date(endDate).setUTCHours(23, 59, 59, 999); // End of the day
+      const endDateISOFormatted = new Date(endDateISO).toISOString(); // Convert to ISO
 
       const querySnapshot = await db
         .collection(collection)
-        .where(field, ">=", startTimestamp)
-        .where(field, "<=", endTimestamp)
+        .where(field, ">=", startDateISO)
+        .where(field, "<=", endDateISOFormatted)
         .get();
 
       if (querySnapshot.empty) {
         console.warn(
-          `[WARN] No documents found in '${collection}' within the date range '${startDate}' to '${endDate}'`
+          `[WARN] No documents found in '${collection}' within the date range '${startDateISO}' to '${endDateISOFormatted}'`
         );
         return [];
       }
@@ -243,61 +244,37 @@ class FirestoreInterface {
     }
   }
 
-  // static async getDocumentsByDateRange(collection, field, startDate, endDate) {
-  //   try {
-  //     const startTimestamp = Timestamp.fromDate(new Date(startDate));
-  //     const endTimestamp = Timestamp.fromDate(new Date(endDate));
+  // Get documents by a specific condition (e.g., where a field is true or non-null)
+  static async getDocumentsByCondition(collection, field, value) {
+    try {
+      console.log(
+        `[INFO] Querying '${collection}' where '${field}' is '${value}'`
+      );
+      const querySnapshot = await db
+        .collection(collection)
+        .where(field, "==", value)
+        .get();
 
-  //     const querySnapshot = await db
-  //       .collection(collection)
-  //       .where(field, ">=", startTimestamp)
-  //       .where(field, "<=", endTimestamp)
-  //       .get();
+      if (querySnapshot.empty) {
+        console.warn(
+          `[WARN] No documents found in '${collection}' where '${field}' is '${value}'`
+        );
+        return [];
+      }
 
-  //     if (querySnapshot.empty) {
-  //       return [];
-  //     }
-
-  //     return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  //   } catch (error) {
-  //     throw new Error(
-  //       `Error querying documents by date range: ${error.message}`
-  //     );
-  //   }
-  // }
-
-  // static async getDocumentsByDateRange(collection, field, startDate, endDate) {
-  //   try {
-  //     console.log(
-  //       `[INFO] Querying '${collection}' where '${field}' is between '${startDate}' and '${endDate}'`
-  //     );
-
-  //     const querySnapshot = await db
-  //       .collection(collection)
-  //       .where(field, ">=", startDate)
-  //       .where(field, "<=", endDate)
-  //       .get();
-
-  //     if (querySnapshot.empty) {
-  //       console.warn(
-  //         `[WARN] No documents found in '${collection}' within the date range '${startDate}' to '${endDate}'`
-  //       );
-  //       return [];
-  //     }
-
-  //     console.log(
-  //       `[SUCCESS] Fetched ${querySnapshot.size} documents from '${collection}' within the date range`
-  //     );
-  //     return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-  //   } catch (error) {
-  //     console.error(
-  //       `[ERROR] Error querying documents by date range in collection '${collection}': ${error.message}`
-  //     );
-  //     throw new Error(
-  //       `Error querying documents by date range in collection '${collection}': ${error.message}`
-  //     );
-  //   }
-  // }
+      console.log(
+        `[SUCCESS] Fetched ${querySnapshot.size} documents from '${collection}' where '${field}' is '${value}'`
+      );
+      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error(
+        `[ERROR] Error querying documents by condition in collection '${collection}': ${error.message}`
+      );
+      throw new Error(
+        `Error querying documents by condition in collection '${collection}': ${error.message}`
+      );
+    }
+  }
 
   // ===================================
   // Helper methods for logging and errors
