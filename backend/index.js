@@ -5,6 +5,7 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const invoiceRoutes = require("./development/routes/invoiceRoutes");
 const invoiceRouterRoutes = require("./development/routes/invoiceRouterRoutes");
+const userBoardRoutes = require("./development/routes/userBoardRoutes");
 
 // ====================================================== //
 
@@ -30,6 +31,7 @@ app.use((req, res, next) => {
 // --- API ROUTES HANDLERS --- //
 app.use("/api/invoices", invoiceRoutes); // Handle all invoice requests within the invoice routes
 app.use("/api/invoice-router", invoiceRouterRoutes); // Handle all invoice router requests within the invoice router routes
+app.use("/api/user-board", userBoardRoutes); // Handle all user board routes
 
 // Start server
 app.listen(PORT, () => {

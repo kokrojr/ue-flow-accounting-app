@@ -676,6 +676,30 @@ class InvoiceRouterModel {
       throw new Error(`Error finding role by category: ${error.message}`);
     }
   }
+
+  // Find role assignment by role and category, supporting any routeType
+  static async findRoleByRole(routerIdOrType, role) {
+    try {
+      const resolvedRouterId = await this.#resolveRouterId(routerIdOrType);
+      const routingTable = await this.getRoutingTableById(resolvedRouterId);
+
+      if (!routingTable) throw new Error("Routing table entry not found");
+
+      const roleAssignment = routingTable
+        .getRoleAssignments()
+        .find((assignment) => assignment.role === role);
+
+      if (!roleAssignment) {
+        throw new Error(
+          `Role assignment for category '${role}' not found.`
+        );
+      }
+
+      return roleAssignment;
+    } catch (error) {
+      throw new Error(`Error finding role by category: ${error.message}`);
+    }
+  }
 }
 
 module.exports = InvoiceRouterModel;
