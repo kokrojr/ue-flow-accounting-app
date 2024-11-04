@@ -21,9 +21,10 @@ app.use(bodyParser.json()); // Parse incoming JSON
 app.use((req, res, next) => {
   // Dummy user data for testing purposes
   req.user = {
-    id: "testUser123",
-    name: "Test User",
-    role: "Manager"  // add any relevant user properties
+    id: "creator123",
+    name: "Jane Smith",
+    role: "Manager",  // add any relevant user properties
+    userBoardId: "0XWkvfIiIVb7jU5YA9rg"
   };
   next();
 });

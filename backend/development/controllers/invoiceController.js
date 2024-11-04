@@ -15,7 +15,10 @@ class InvoiceController {
     try {
       // Get invoice data
       const invoiceData = req.body;
-      const newInvoice = await InvoiceModel.createInvoice(invoiceData); // call invoice model
+      const creatorUserId = req.user.id;
+      const creatorBoardId = req.user.userBoardId;
+
+      const newInvoice = await InvoiceModel.createInvoice(invoiceData, creatorUserId, creatorBoardId); // call invoice model
       res.status(201).json({
         message: "Invoice created successfully",
         invoice: newInvoice,
@@ -256,50 +259,57 @@ class InvoiceController {
   // ------------- Workflow: Submit Invoice ------------- //
   // ---------------------------------------------------- //
 
-  // Submit Invoice for Approval
   static async submitInvoice(req, res) {
     try {
       const { invoiceId } = req.params;
+      const creatorUserId = req.user.id;
+      const creatorBoardId = req.user.userBoardId;
 
-      // Retrieve the invoice
-      const invoice = await InvoiceModel.getInvoiceById(invoiceId);
-      if (!invoice) return res.status(404).json({ error: "Invoice not found" });
-
-      // Verify the invoice is in the Draft stage before submission
-      if (invoice.workflow.currentStage !== "Draft") {
-        return res
-          .status(400)
-          .json({ error: "Invoice must be in Draft to submit for approval." });
-      }
-
-      // TODO: Submit the invoice
-      
-
-      // Update the workflow to reflect submission
-      invoice.workflow.currentStage = "Submitted";
-      invoice.workflow.statusChangeDate = new Date().toISOString();
-      invoice.workflow.actions.push({
-        stage: "Submitted",
-        action: "Submitted for Approval",
-        by: req.user.id, // assuming req.user contains the authenticated user info
-        timeStamp: new Date().toISOString(),
-      });
-
-      // Save changes in Firestore
-      const updatedInvoice = await InvoiceModel.updateInvoice(invoiceId, {
-        workflow: invoice.workflow,
-        status: "Submitted",
-        dateSubmitted: new Date().toISOString(),
-      });
+      // Submit the invoice using the model method
+      const response = await InvoiceModel.submitInvoice(
+        invoiceId,
+        creatorUserId,
+        creatorBoardId
+      );
 
       res.status(200).json({
-        message: "Invoice submitted successfully",
-        invoice: updatedInvoice,
+        message: "Invoice submitted successfully for approval",
+        data: response,
       });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({
+        error: error.message,
+        info: "Failed to submit invoice. Please ensure the invoice ID is correct and the user has permission.",
+      });
     }
   }
+
+  // ---------------------------------------------------- //
+  // ------------- Workflow: Approve Invoice ------------- //
+  // ---------------------------------------------------- //
+
+  static async approveInvoice(req, res) {
+    try {
+      const { invoiceId } = req.params;
+      const approverUserId = req.user.id;
+
+      const response = await InvoiceModel.approveInvoice(
+        invoiceId,
+        approverUserId
+      );
+
+      res.status(200).json({
+        message: "Invoice approved successfully",
+        data: response,
+      });
+    } catch (error) {
+      res.status(500).json({
+        error: error.message,
+        info: "Failed to approve invoice. Please ensure the invoice ID and user permissions are correct.",
+      });
+    }
+  }
+
 }
 
 module.exports = InvoiceController;

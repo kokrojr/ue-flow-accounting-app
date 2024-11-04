@@ -93,7 +93,7 @@ class UserBoardModel {
 
   // ----------------------------------------------------
   // Get user board's ID by userID
-  static async getuserBoardIdByUserId(userID) {
+  static async getUserBoardIdByUserId(userID) {
     try {
       const userBoard = await this.getUserBoardByUserId(userID);
       return userBoard ? userBoard.userBoardId : null;
