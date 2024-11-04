@@ -314,9 +314,12 @@ class InvoiceModel {
     }
   }
 
+  // ====================================================== //
+  // ===================== Begin Flow ===================== //
+  // ====================================================== //
+
   // --------------------------------------------------- //
-  // ----------- Submit Invoice for Approval ----------- //
-  // --------------------------------------------------- //
+  // Submit Invoice for Approval
 
   static async submitInvoice(invoiceId, userId, creatorBoardId) {
     try {
@@ -325,9 +328,12 @@ class InvoiceModel {
       if (!invoice) throw new Error("Invoice not found");
 
       // Ensure invoice is in draft stage
-      if (invoice.workflow.currentStage !== "Draft") {
+      if (invoice.status !== "Draft") {
         throw new Error("Invoice must be in Draft to submit for approval.");
       }
+
+      // Update essential fields before routing
+      invoice.dateSubmitted = new Date().toISOString();
 
       // Update workflow status
       invoice.workflow.currentStage = "Submitted";
@@ -339,9 +345,11 @@ class InvoiceModel {
         timeStamp: new Date().toISOString(),
       });
 
-      // FIXME: Invoice was updated as submited but was not submitted to approver
-      // Save workflow update in firestore
-      await this.updateInvoice(invoiceId, { workflow: invoice.workflow });
+      // Save workflow, submission status, and assignee in Firestore
+      await this.updateInvoice(invoiceId, {
+        dateSubmitted: invoice.dateSubmitted,
+        workflow: invoice.workflow,
+      });
 
       // Initiate invoice routing
       return await this.sendInvoiceForApproval(invoiceId, creatorBoardId);
@@ -351,8 +359,7 @@ class InvoiceModel {
   }
 
   // --------------------------------------------------- //
-  // ----------- Send Invoice for Approval ----------- //
-  // --------------------------------------------------- //
+  // Send Invoice for Approval
 
   static async sendInvoiceForApproval(invoiceId, creatorBoardId) {
     try {
@@ -365,8 +372,8 @@ class InvoiceModel {
         "default",
         "Approver"
       );
-      // const approver = await InvoiceRouterModel.getRoleAssignment("Approver");
 
+      // Validate if approver is set
       if (!approver) throw new Error("Approver not found");
 
       // Find the approver's user board ID
@@ -374,14 +381,12 @@ class InvoiceModel {
         approver.userId
       );
 
-      // TODO: Get the
-
       if (!approverBoardId) throw new Error("Approver's user board not found");
 
       // Assign the document to the approver's user board
       await UserBoardModel.assignDocument(approverBoardId, {
         docID: invoiceId,
-        docType: "invoice", // Adding the docType field here
+        docType: "invoice",
         purpose: "for approval",
         assignedBy: "system",
         status: "pending",
@@ -391,16 +396,17 @@ class InvoiceModel {
       // Remove from creator's user board
       await UserBoardModel.removeAssignedDocument(creatorBoardId, invoiceId);
 
-      // await UserBoardModel.removeAssignedDocument(
-      //   invoice.createdBy.userID,
-      //   invoiceId
-      // );
-
       // Update currentAssignee in the invoice
       invoice.currentAssignee = {
         userId: approver.userId,
         userName: approver.userName,
       };
+
+      // Update essential fields
+      invoice.isSubmitted = true;
+      invoice.status = "Submitted";
+
+      // Update workflow
       invoice.workflow.actions.push({
         stage: "Approval",
         action: "Routed for Approval",
@@ -410,19 +416,21 @@ class InvoiceModel {
 
       // Update Firestore
       await this.updateInvoice(invoiceId, {
+        isSubmitted: invoice.isSubmitted,
+        status: invoice.status,
         currentAssignee: invoice.currentAssignee,
         workflow: invoice.workflow,
       });
 
       return invoice;
+
     } catch (error) {
       throw new Error(`Error sending invoice for approval: ${error.message}`);
     }
   }
 
   // --------------------------------------------------- //
-  // ----------- Approve Invoice ----------- //
-  // --------------------------------------------------- //
+  // Approve Invoice
 
   static async approveInvoice(invoiceId, approverUserId) {
     try {
