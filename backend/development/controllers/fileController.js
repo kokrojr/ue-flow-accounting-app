@@ -1,6 +1,7 @@
 // ============= FILE CONTROLLER ============= //
 
 const FileModel = require("../models/fileModel");
+const StorageService = require("../services/storageService");
 
 class FileController {
   // ----------------------------------------------------
@@ -24,8 +25,10 @@ class FileController {
   // Add a new file to Firebase Storage and Firestore
   static async addFile(req, res) {
     try {
-      const { originalname, buffer, mimetype } = req.file;
-      const { category, createdBy } = req.body;
+      const uploadedBy = req.user.id;
+      // const createdBy = req.user.id;
+      const { originalname, buffer, mimetype, size } = req.file;
+      const { category } = req.body;
       const destinationPath = `uploads/${category}/${Date.now()}_${originalname}`;
 
       // Upload file to Firebase Storage
@@ -39,7 +42,7 @@ class FileController {
       const fileData = {
         fileName: originalname,
         category,
-        createdBy,
+        uploadedBy,
         filePath: destinationPath,
         downloadURL,
         uploadDate: new Date().toISOString(),
