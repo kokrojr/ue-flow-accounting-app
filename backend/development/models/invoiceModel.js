@@ -423,7 +423,6 @@ class InvoiceModel {
       });
 
       return invoice;
-
     } catch (error) {
       throw new Error(`Error sending invoice for approval: ${error.message}`);
     }
@@ -432,77 +431,171 @@ class InvoiceModel {
   // --------------------------------------------------- //
   // Approve Invoice
 
-  static async approveInvoice(invoiceId, approverUserId) {
+  static async approveInvoice(invoiceId, approverUserId, approverBoardId) {
     try {
-      // Step 1: Retrieve the invoice and validate its current stage
-      const invoiceData = await FirestoreInterface.getDocumentById(
-        "invoices",
-        invoiceId
-      );
-      if (!invoiceData) throw new Error("Invoice not found");
+      // Fetch invoice
+      const invoice = await this.getInvoiceById(invoiceId);
+      if (!invoice) throw new Error("Invoice not found");
 
-      if (invoiceData.workflow.currentStage !== "Submitted") {
+      // Ensure invoice is in 'Submitted' stage
+      if (invoice.status !== "Submitted") {
         throw new Error("Invoice must be in 'Submitted' stage to approve");
       }
 
-      // Step 2: Update workflow stage to Approved
-      invoiceData.workflow.currentStage = "Approved";
-      invoiceData.workflow.actions.push({
+      // Update essential fields for approval
+      invoice.status = "Approved";
+      invoice.dateApprovedOrRejected = new Date().toISOString();
+
+      // Update workflow status
+      invoice.workflow.currentStage = "Approved";
+      invoice.workflow.actions.push({
         stage: "Approved",
         action: "Approved by Approver",
         by: approverUserId,
         timestamp: new Date().toISOString(),
       });
 
-      // Step 3: Route invoice to Finance for payment processing
-      // Get the Finance role assignment from InvoiceRouterModel
-      const financeUser = await InvoiceRouterModel.getRoleAssignment("Finance");
-      if (!financeUser) throw new Error("Finance role assignment not found");
-
-      // Get Finance user's userBoard ID
-      const financeBoardId = await UserBoardModel.getUserBoardIdByUserId(
-        financeUser.userId
-      );
-      if (!financeBoardId) throw new Error("Finance user board not found");
-
-      // Assign the document to Finance's userBoard
-      await UserBoardModel.assignDocument(financeBoardId, {
-        docID: invoiceId,
-        purpose: "for payment",
-        assignedBy: approverUserId,
+      // Save approval status and workflow updates in Firestore
+      await this.updateInvoice(invoiceId, {
+        status: invoice.status,
+        dateApprovedOrRejected: invoice.dateApprovedOrRejected,
+        workflow: invoice.workflow,
       });
 
-      // Remove the document from Approver's userBoard
-      const approverBoardId = await UserBoardModel.getUserBoardIdByUserId(
-        approverUserId
-      );
-      await UserBoardModel.removeAssignedDocument(approverBoardId, invoiceId);
+      // Generate and assign the PDF
+      await this.generateAndAssignInvoicePDF(invoice, approverBoardId);
 
-      // Step 4: Trigger PDF generation for the invoice
-      PDFService.generateInvoicePDF(invoiceId); // Assumes a separate PDF service
-      // await PDFService.generateInvoicePDF(invoiceId); // Assumes a separate PDF service
+      // Route invoice to Finance for payment processing
+      await this.sendInvoiceToFinance(invoiceId, approverBoardId);
 
-      // Step 5: Update currentAssignee in invoice to Finance
-      invoiceData.currentAssignee = {
-        userId: financeUser.userId,
-        userName: financeUser.userName,
-      };
-
-      // Step 6: Save changes to Firestore
-      await FirestoreInterface.updateDocument(
-        "invoices",
-        invoiceId,
-        invoiceData
-      );
-
-      return {
-        message: "Invoice approved successfully and forwarded to Finance",
-        currentAssignee: invoiceData.currentAssignee,
-      };
+      // Fetch and return the updated invoice data
+      const updatedInvoice = await this.getInvoiceById(invoiceId);
+      return updatedInvoice;
     } catch (error) {
       throw new Error(`Error approving invoice: ${error.message}`);
     }
   }
+
+  // --------------------------------------------------- //
+  // Generate and Assign Invoice PDF for Signing
+
+  static async generateAndAssignInvoicePDF(invoice, approverBoardId) {
+    try {
+      // Generate PDF and obtain the download URL
+      const pdfURL = await PDFService.generateAndUploadInvoicePDF(
+        invoice,
+        invoice.docID
+      );
+
+      // Update invoice record with PDF URL and mark PDF generation as complete
+      invoice.pdfURL = pdfURL;
+      invoice.hasPDF = true;
+
+      // Update workflow to log PDF generation
+      invoice.workflow.actions.push({
+        stage: "PDF Generation",
+        action: "Generated Invoice PDF",
+        by: "system",
+        timestamp: new Date().toISOString(),
+      });
+
+      // Save PDF URL and workflow status in Firestore
+      await this.updateInvoice(invoice.docID, {
+        pdfURL: invoice.pdfURL,
+        hasPDF: invoice.hasPDF,
+        workflow: invoice.workflow,
+      });
+
+      console.log(
+        `[INFO] PDF generated and uploaded for invoice ${invoice.docID}: ${pdfURL}`
+      );
+
+      // Assign PDF to approver’s user board for signing
+      await UserBoardModel.assignDocument(approverBoardId, {
+        docID: invoice.docID,
+        docType: "invoice",
+        purpose: "for signing",
+        assignedBy: "system",
+        status: "pending",
+        priority: "high",
+        pdfURL: pdfURL,
+      });
+
+      console.log(
+        `[INFO] PDF assigned to approver's board for invoice ${invoice.docID}`
+      );
+    } catch (error) {
+      console.error(
+        `[ERROR] Failed to generate and assign PDF for invoice ${invoice.docID}: ${error.message}`
+      );
+    }
+  }
+
+  // --------------------------------------------------- //
+  // ----------- Send Invoice to Finance --------------- //
+  // --------------------------------------------------- //
+
+  static async sendInvoiceToFinance(invoiceId, approverBoardId) {
+    try {
+      // Retrieve the invoice
+      const invoice = await this.getInvoiceById(invoiceId);
+      if (!invoice) throw new Error("Invoice not found");
+
+      // Get finance personnel details from the InvoiceRouterModel
+      const financePerson = await InvoiceRouterModel.findRoleByRole(
+        "default",
+        "Finance"
+      );
+
+      if (!financePerson) throw new Error("Finance personnel not found");
+
+      // Find the finance person’s user board ID
+      const financeBoardId = await UserBoardModel.getUserBoardIdByUserId(
+        financePerson.userId
+      );
+
+      if (!financeBoardId) throw new Error("Finance user's board not found");
+
+      // Assign the invoice to the finance user's board
+      await UserBoardModel.assignDocument(financeBoardId, {
+        docID: invoiceId,
+        docType: "invoice",
+        purpose: "for payment processing",
+        assignedBy: "system",
+        status: "pending",
+        priority: "high",
+      });
+
+      // Remove from approver's user board
+      await UserBoardModel.removeAssignedDocument(approverBoardId, invoiceId);
+
+      // Update currentAssignee in the invoice to finance personnel
+      invoice.currentAssignee = {
+        userId: financePerson.userId,
+        userName: financePerson.userName,
+      };
+
+      // Update workflow
+      invoice.workflow.actions.push({
+        stage: "Finance",
+        action: "Routed for Payment Processing",
+        by: "system",
+        timeStamp: new Date().toISOString(),
+      });
+
+      // Update Firestore with the new workflow status, current assignee, and other details
+      await this.updateInvoice(invoiceId, {
+        currentAssignee: invoice.currentAssignee,
+        workflow: invoice.workflow,
+      });
+
+      return invoice;
+    } catch (error) {
+      throw new Error(`Error sending invoice to finance: ${error.message}`);
+    }
+  }
+
+  
 }
 
 module.exports = InvoiceModel;

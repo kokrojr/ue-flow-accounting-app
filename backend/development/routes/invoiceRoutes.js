@@ -24,7 +24,6 @@ router.get("/closed", InvoiceController.getClosedInvoices); // Get all closed in
 // ----------------------- Workflow Specific Routes ----------------------- //
 // ------------------------------------------------------------------------ //
 
-
 router.put("/:invoiceId/submit", InvoiceController.submitInvoice); // Route to submit an invoice for approval
 router.put("/:invoiceId/approve", InvoiceController.approveInvoice); // Route to approve an invoice
 

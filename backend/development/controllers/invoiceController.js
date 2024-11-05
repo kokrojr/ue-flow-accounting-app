@@ -18,7 +18,11 @@ class InvoiceController {
       const creatorUserId = req.user.id;
       const creatorBoardId = req.user.userBoardId;
 
-      const newInvoice = await InvoiceModel.createInvoice(invoiceData, creatorUserId, creatorBoardId); // call invoice model
+      const newInvoice = await InvoiceModel.createInvoice(
+        invoiceData,
+        creatorUserId,
+        creatorBoardId
+      ); // call invoice model
       res.status(201).json({
         message: "Invoice created successfully",
         invoice: newInvoice,
@@ -292,14 +296,16 @@ class InvoiceController {
     try {
       const { invoiceId } = req.params;
       const approverUserId = req.user.id;
+      const approverBoardId = req.user.userBoardId;
 
       const response = await InvoiceModel.approveInvoice(
         invoiceId,
-        approverUserId
+        approverUserId,
+        approverBoardId
       );
 
       res.status(200).json({
-        message: "Invoice approved successfully",
+        message: "Invoice approved successfully and forwarded to Finance",
         data: response,
       });
     } catch (error) {
@@ -309,7 +315,6 @@ class InvoiceController {
       });
     }
   }
-
 }
 
 module.exports = InvoiceController;

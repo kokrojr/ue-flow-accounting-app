@@ -14,6 +14,7 @@ class Invoice {
       this.isPaid = invoiceData.isPaid || false;
       this.isArchived = invoiceData.isArchived || false;
       this.hasPDF = invoiceData.hasPDF || false;
+      this.pdfURL = invoiceData.pdfURL || "";
 
       // Customer & Items
       this.customer = invoiceData.customer || {}; // Customer object

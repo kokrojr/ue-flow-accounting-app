@@ -3,7 +3,8 @@
 // ========================================================= //
 
 // Import configurations
-const db = require("../../config/firebase");
+const { db } = require("../../config/firebase");
+// const db = require("../../config/firebase");
 const { Timestamp } = require("firebase-admin").firestore;
 
 class FirestoreInterface {
