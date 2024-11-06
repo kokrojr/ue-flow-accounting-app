@@ -222,6 +222,44 @@ class UserBoard {
 
   // ----------------------------------------------------
   // Assign file
+  // addAssignedFile(fileData) {
+  //   if (typeof fileData !== "object")
+  //     throw new Error("File data must be an object");
+
+  //   const {
+  //     fileID,
+  //     fileType,
+  //     purpose,
+  //     assignedBy,
+  //     status,
+  //     priority = "normal",
+  //     fileURL,
+  //   } = fileData;
+  //   if (!fileID || !fileType || !purpose || !assignedBy || !status || !fileURL)
+  //     throw new Error("Incomplete file data for assignment");
+
+  //   const assignedDate = new Date().toISOString();
+  //   this.assignedFiles.push({
+  //     fileID,
+  //     fileType,
+  //     purpose,
+  //     assignedDate,
+  //     assignedBy,
+  //     status,
+  //     priority,
+  //     fileURL,
+  //   });
+
+  //   this.addActivity({
+  //     action: "assigned file",
+  //     docID: fileID,
+  //     performedBy: assignedBy,
+  //   });
+  //   this.notifications = true;
+  //   this.updateLastUpdated();
+  // }
+
+  // Assign file
   addAssignedFile(fileData) {
     if (typeof fileData !== "object")
       throw new Error("File data must be an object");
@@ -235,12 +273,22 @@ class UserBoard {
       priority = "normal",
       fileURL,
     } = fileData;
-    if (!fileID || !fileType || !purpose || !assignedBy || !status || !fileURL)
+
+    // Ensure all fields are basic types (strings, etc.)
+    if (
+      !fileID ||
+      !fileType ||
+      !purpose ||
+      !assignedBy ||
+      !status ||
+      !fileURL
+    ) {
       throw new Error("Incomplete file data for assignment");
+    }
 
     const assignedDate = new Date().toISOString();
     this.assignedFiles.push({
-      fileID,
+      fileID: fileID.toString(), // Ensure fileID is a string
       fileType,
       purpose,
       assignedDate,
@@ -252,7 +300,7 @@ class UserBoard {
 
     this.addActivity({
       action: "assigned file",
-      docID: fileID,
+      docID: fileID.toString(),
       performedBy: assignedBy,
     });
     this.notifications = true;

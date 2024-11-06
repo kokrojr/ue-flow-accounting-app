@@ -8,6 +8,7 @@ const UserBoardModel = require("./userBoardModel");
 const InvoiceRouterModel = require("./invoiceRouterModel");
 const PDFService = require("../services/pdfService"); // Generate PDFs
 const EmailService = require("../services/emailService"); // Send Emails
+const FileModel = require("../models/fileModel"); // Manage Files
 
 class InvoiceModel {
   // -------------------------------------- //
@@ -479,9 +480,99 @@ class InvoiceModel {
   // --------------------------------------------------- //
   // Generate and Assign Invoice PDF for Signing
 
+  // static async generateAndAssignInvoicePDF(invoice, approverBoardId) {
+  //   try {
+  //     // Generate PDF and obtain the download URL
+  //     const pdfURL = await PDFService.generateAndUploadInvoicePDF(
+  //       invoice,
+  //       invoice.docID
+  //     );
+
+  //     // Update invoice record with PDF URL and mark PDF generation as complete
+  //     invoice.pdfURL = pdfURL;
+  //     invoice.hasPDF = true;
+
+  //     // Update workflow to log PDF generation
+  //     invoice.workflow.actions.push({
+  //       stage: "PDF Generation",
+  //       action: "Generated Invoice PDF",
+  //       by: "system",
+  //       timestamp: new Date().toISOString(),
+  //     });
+
+  //     // Save PDF URL and workflow status in Firestore
+  //     await this.updateInvoice(invoice.docID, {
+  //       pdfURL: invoice.pdfURL,
+  //       hasPDF: invoice.hasPDF,
+  //       workflow: invoice.workflow,
+  //     });
+
+  //     console.log(
+  //       `[INFO] PDF generated and uploaded for invoice ${invoice.docID}: ${pdfURL}`
+  //     );
+
+  //     // TODO: Separate Functions from here
+  //     // Record file in Firestore 'files' collection
+  //     const fileRecord = {
+  //       fileName: `${invoice.docID}.pdf`,
+  //       fileType: "pdf",
+  //       fileSize: invoice.fileSize, // Add this in PDFService if needed
+  //       category: "invoice",
+  //       uploadSource: "system",
+  //       uploadedBy: "system",
+  //       createdBySystem: true,
+  //       downloadURL: pdfURL,
+  //       storagePath: `invoices/${invoice.docID}.pdf`,
+  //       uploadDate: new Date().toISOString(),
+  //     };
+  //     const fileID = await FileModel.addFile(fileRecord);
+
+  //     // Assign the file to approver’s user board for signing
+  //     await UserBoardModel.assignFile(approverBoardId, {
+  //       fileID,
+  //       fileType: "invoice",
+  //       purpose: "for signing",
+  //       assignedBy: "system",
+  //       status: "pending",
+  //       priority: "high",
+  //       fileURL: pdfURL,
+  //     });
+
+  //     console.log(
+  //       `[INFO] PDF assigned to approver's board for invoice ${invoice.docID}`
+  //     );
+  //   } catch (error) {
+  //     console.error(
+  //       `[ERROR] Failed to generate and assign PDF for invoice ${invoice.docID}: ${error.message}`
+  //     );
+  //   }
+  // }
+
+  // --------------------------------------------------- //
+  // Generate, Record, and Assign Invoice PDF for Signing
+
   static async generateAndAssignInvoicePDF(invoice, approverBoardId) {
     try {
-      // Generate PDF and obtain the download URL
+      // Step 1: Generate PDF and get URL
+      const pdfURL = await this.generateInvoicePDF(invoice);
+
+      // Step 2: Record file in Firestore and get file Entry
+      const fileEntry = await this.recordFileInFirestore(invoice, pdfURL);
+
+      // Step 3: Assign file to approver's user board
+      await this.assignFileToUserBoard(approverBoardId, fileEntry, pdfURL);
+    } catch (error) {
+      console.error(
+        `[ERROR] Failed to complete PDF generation and assignment for invoice ${invoice.docID}: ${error.message}`
+      );
+    }
+  }
+
+  // --------------------------------------------------- //
+  // Generate and Upload Invoice PDF
+
+  static async generateInvoicePDF(invoice) {
+    try {
       const pdfURL = await PDFService.generateAndUploadInvoicePDF(
         invoice,
         invoice.docID
@@ -509,27 +600,91 @@ class InvoiceModel {
       console.log(
         `[INFO] PDF generated and uploaded for invoice ${invoice.docID}: ${pdfURL}`
       );
+      return pdfURL;
+    } catch (error) {
+      console.error(
+        `[ERROR] Failed to generate PDF for invoice ${invoice.docID}: ${error.message}`
+      );
+      throw error;
+    }
+  }
 
-      // Assign PDF to approver’s user board for signing
-      await UserBoardModel.assignDocument(approverBoardId, {
-        docID: invoice.docID,
-        docType: "invoice",
+  // --------------------------------------------------- //
+  // Record File Metadata in Firestore
+
+  static async recordFileInFirestore(invoice, pdfURL) {
+    try {
+      const fileRecord = {
+        fileName: `${invoice.docID}.pdf`,
+        fileType: "pdf",
+        fileSize: invoice.fileSize, // TODO: Set this in PDFService if needed
+        category: "invoice",
+        uploadSource: "system",
+        uploadedBy: "system",
+        createdBySystem: true,
+        downloadURL: pdfURL,
+        storagePath: `invoices/${invoice.docID}.pdf`,
+        uploadDate: new Date().toISOString(),
+      };
+      const fileID = await FileModel.addFile(fileRecord);
+
+      console.log(
+        `[INFO] File record created in Firestore for invoice ${invoice.docID}`
+      );
+      return fileID;
+    } catch (error) {
+      console.error(
+        `[ERROR] Failed to record file for invoice ${invoice.docID}: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  // --------------------------------------------------- //
+  // Assign File to User Board
+
+  static async assignFileToUserBoard(approverBoardId, fileEntry, pdfURL) {
+    try {
+      await UserBoardModel.assignFile(approverBoardId, {
+        fileID: fileEntry.fileID,
+        fileType: fileEntry.fileType,
         purpose: "for signing",
         assignedBy: "system",
         status: "pending",
         priority: "high",
-        pdfURL: pdfURL,
+        fileURL: pdfURL,
       });
 
-      console.log(
-        `[INFO] PDF assigned to approver's board for invoice ${invoice.docID}`
-      );
+      console.log(`[INFO] PDF assigned to approver's board for file ${fileID}`);
     } catch (error) {
       console.error(
-        `[ERROR] Failed to generate and assign PDF for invoice ${invoice.docID}: ${error.message}`
+        `[ERROR] Failed to assign file ${fileID} to user board: ${error.message}`
       );
+      throw error;
     }
   }
+
+  // Assign File to User Board
+  // static async assignFileToUserBoard(approverBoardId, fileID, pdfURL) {
+  //   try {
+  //     await UserBoardModel.assignFile(approverBoardId, {
+  //       fileID: fileID.toString(), // Convert fileID to string if not already
+  //       fileType: "invoice",
+  //       purpose: "for signing",
+  //       assignedBy: "system",
+  //       status: "pending",
+  //       priority: "high",
+  //       fileURL: pdfURL,
+  //     });
+
+  //     console.log(`[INFO] PDF assigned to approver's board for file ${fileID}`);
+  //   } catch (error) {
+  //     console.error(
+  //       `[ERROR] Failed to assign file ${fileID} to user board: ${error.message}`
+  //     );
+  //     throw error;
+  //   }
+  // }
 
   // --------------------------------------------------- //
   // ----------- Send Invoice to Finance --------------- //
@@ -594,8 +749,6 @@ class InvoiceModel {
       throw new Error(`Error sending invoice to finance: ${error.message}`);
     }
   }
-
-  
 }
 
 module.exports = InvoiceModel;

@@ -27,6 +27,7 @@ class FileModel {
       });
 
       return fileEntry;
+      // return fileEntry.fileID;
     } catch (error) {
       throw new Error(`Error adding file: ${error.message}`);
     }

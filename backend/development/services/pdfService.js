@@ -6,7 +6,7 @@ const PDFDocument = require("pdfkit");
 class PDFService {
   static async generateAndUploadInvoicePDF(invoiceData, invoiceId) {
     const doc = new PDFDocument({ margin: 40 }); // Explicitly set a margin
-    const filePath = `${invoiceId}.pdf`;
+    const filePath = `system/invoice/${Date.now()}_${invoiceId}.pdf`;
 
     // Create a reference to the file in Firebase Storage
     const file = storage.file(filePath);
